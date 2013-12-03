@@ -16,6 +16,8 @@ import com.mihai.mirecs.data.ResultListener;
 
 public class MainActivity extends Activity implements ResultListener {
 
+    private static final int TOTAL_QUERIES = 3;
+    private static int sQueryCount = 0;
     private FacebookRecommender mFb = new FacebookRecommender();
 
     @Override
@@ -42,10 +44,11 @@ public class MainActivity extends Activity implements ResultListener {
     @Override
     public void onAuthReady(boolean successful) {
         if (successful) {
-            setText("FB LOGGED IN");
+            setText("Successfully logged in.");
+            sQueryCount = 0;
             mFb.computeRecommendations(this);
         } else {
-            setText("FB FAILED TO LOG IN");
+            setText("Whoops, couldn't log in.");
         }
     }
 
@@ -53,7 +56,7 @@ public class MainActivity extends Activity implements ResultListener {
     public void onResultsReady(List<Entity> results) {
         MainAdapter adapter = new MainAdapter(this, results);
         ((ListView) findViewById(R.id.recs)).setAdapter(adapter);
-        setText("FB DONE");
+        setText("Progress: " + Math.round((100.0*(++sQueryCount))/TOTAL_QUERIES) + "%");
     }
 
     private void setText(String text) {
