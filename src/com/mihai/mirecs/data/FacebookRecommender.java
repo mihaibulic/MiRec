@@ -24,7 +24,6 @@ public class FacebookRecommender implements Recommender {
     private static final String TV = "Tv Show";
     private static final String MOVIE = "Movie";
 
-    private static final int QUERY_COUNT = 3;
     private static final String PATH = "/fql";
     private static final String ID = "page_id";
     private static final String DATA = "data";
@@ -32,7 +31,7 @@ public class FacebookRecommender implements Recommender {
     private static final String NAME = "name";
     private static final String PICTURE = "pic_square";
 
-    private static final int ME_SCORE = 3;
+    private static final int ME_SCORE = 2;
     // optionall may filter for only verified entities: AND is_verified = 'true' to be certain we have no dups
     private static final String RES_QUERY = "SELECT page_id, name, pic_square FROM page WHERE page_id IN (SELECT page_id FROM #pageIds)";
     private static final String ME_QUERY = "{ \"pageIds\": \"SELECT page_id FROM page_fan WHERE uid = me() AND (type = '%s' OR type = '%s' OR type = '%s')\"," +
@@ -45,13 +44,12 @@ public class FacebookRecommender implements Recommender {
             "\"res\": \""+RES_QUERY+"\" }";
 
     private static final int FRIENDS_SCORE = 1;
-    private static final String F_QUERY = "SELECT uid1 FROM friend where uid2 = me()";
+    private static final String F_QUERY = "SELECT uid1 FROM friend where uid2 = me() LIMIT 50";
     private static final String FRIENDS_QUERY = "{ \"pageIds\": \"SELECT page_id FROM page_fan WHERE uid in ("+F_QUERY+") AND (type = '%s' OR type = '%s' OR type = '%s')\"," +
             "\"res\": \""+RES_QUERY+"\" }";
 
     private static Session sSession;
     private HashMap<Long, Entity> sEntities = new HashMap<Long, Entity>();
-    private static int sCompletedQueries = 0;
 
     @Override
     public void authenticate(final Activity act, final ResultListener listener) {
@@ -60,11 +58,11 @@ public class FacebookRecommender implements Recommender {
             public void call(Session session, SessionState state, Exception exception) {
                 switch(state) {
                     case OPENING:
-                    case OPENED_TOKEN_UPDATED:
                     case CREATED:
                     case CREATED_TOKEN_LOADED:
                         // explicitly show all states, for completeness. Don't need to do anything.
                         break;
+                    case OPENED_TOKEN_UPDATED:
                     case OPENED:
                         if (!session.getPermissions().contains("user_likes")) {
                             session.requestNewReadPermissions(
@@ -110,6 +108,8 @@ public class FacebookRecommender implements Recommender {
                                     .getJSONObject(0) // we want pageIds
                                     .getJSONArray(RESULTS);
                         } catch (NullPointerException npe) {
+                            publishResults(listener);
+                            npe.printStackTrace();
                             return;
                         }
                         for (int i = 0; i < pageIds.length(); ++i) {
@@ -131,6 +131,8 @@ public class FacebookRecommender implements Recommender {
                                     .getJSONObject(1) // we want res
                                     .getJSONArray(RESULTS);
                         } catch (NullPointerException npe) {
+                            publishResults(listener);
+                            npe.printStackTrace();
                             return;
                         }
                         JSONObject page = null;
@@ -144,25 +146,27 @@ public class FacebookRecommender implements Recommender {
                             }
                         }
 
-                        sCompletedQueries++;
-                        if (sCompletedQueries == QUERY_COUNT) {
-                            sCompletedQueries = 0;
-                            ArrayList<Entity> rankedEntities = new ArrayList<Entity>();
-                            for(Long id : sEntities.keySet()) {
-                                Entity e = sEntities.get(id);
-                                if (e != null && !TextUtils.isEmpty(e.mName) && !TextUtils.isEmpty(e.mPicture)) {
-                                    rankedEntities.add(e);
-                                }
-                            }
-
-                            Collections.sort(rankedEntities, new Entity.EntityComparator());
-                            listener.onResultsReady(rankedEntities);
-                        }
+                        publishResults(listener);
                     }
                 } catch (JSONException e) {
+                    publishResults(listener);
                     e.printStackTrace();
+                    return;
                 }
             }
         }).executeAsync();
+    }
+
+    private void publishResults(ResultListener listener) {
+        ArrayList<Entity> rankedEntities = new ArrayList<Entity>();
+        for(Long id : sEntities.keySet()) {
+            Entity e = sEntities.get(id);
+            if (e != null && !TextUtils.isEmpty(e.mName) && !TextUtils.isEmpty(e.mPicture)) {
+                rankedEntities.add(e);
+            }
+        }
+
+        Collections.sort(rankedEntities, new Entity.EntityComparator());
+        listener.onResultsReady(rankedEntities);
     }
 }
