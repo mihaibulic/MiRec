@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.view.Menu;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.facebook.Session;
 import com.mihai.mirecs.data.Entity;
@@ -57,6 +58,11 @@ public class MainActivity extends Activity implements ResultListener {
         MainAdapter adapter = new MainAdapter(this, results);
         ((ListView) findViewById(R.id.recs)).setAdapter(adapter);
         setText("Progress: " + Math.round((100.0*(++sQueryCount))/TOTAL_QUERIES) + "%");
+
+        if (sQueryCount == TOTAL_QUERIES) {
+            (Toast.makeText(this, R.string.done, Toast.LENGTH_SHORT)).show();
+            adapter.postRecommendations();
+        }
     }
 
     private void setText(String text) {

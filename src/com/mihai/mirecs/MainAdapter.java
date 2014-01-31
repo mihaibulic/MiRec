@@ -6,11 +6,14 @@ import java.net.URL;
 import java.util.List;
 
 import android.app.Activity;
-import android.app.SearchManager;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
+import android.support.v4.app.NotificationCompat;
 import android.util.LruCache;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -24,6 +27,9 @@ import com.mihai.mirecs.data.Entity;
 
 public class MainAdapter extends BaseAdapter implements OnClickListener {
 
+    private final int mMaxNotifications;
+
+    private NotificationManager mNotificationManager;
     private Activity sActivity;
     private List<Entity> mContent;
     LruCache<String, Bitmap> mBitmaps = new LruCache<String, Bitmap>(200);
@@ -31,11 +37,13 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
     public MainAdapter(Activity act, List<Entity> content) {
         sActivity = act;
         mContent = content;
+        mMaxNotifications = sActivity.getResources().getInteger(R.integer.max_notifications);
+        mNotificationManager = (NotificationManager) sActivity.getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
     @Override
     public int getCount() {
-        return mContent.size();
+        return Math.min(mContent.size(), mMaxNotifications);
     }
 
     @Override
@@ -50,7 +58,7 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
 
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
-        if (position < 0 || position >= mContent.size()) {
+        if (position < 0 || position >= mContent.size() || position > mMaxNotifications) {
             return null;
         }
 
@@ -68,20 +76,43 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
             imageView.setImageBitmap(bm);
         } else {
             imageView.setImageResource(R.drawable.ic_blank);
-            new BitmapTask(e.mPicture, imageView).execute();
         }
         ((TextView) convertView.findViewById(R.id.name)).setText(e.mName);
 
         return convertView;
     }
 
+    public void postRecommendations() {
+        for (int x = 0; x < mMaxNotifications; x++) {
+            Entity e = mContent.get(x);
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(sActivity);
+            builder.setContentTitle(e.mName);
+            builder.setContentInfo(sActivity.getString(R.string.mihai));
+            builder.setContentIntent(getPendingIntent(e.mName));
+            builder.setSmallIcon(R.drawable.ic_launcher);
+            builder.setPriority(mMaxNotifications - x);
+
+            Bitmap bm = mBitmaps.get(e.mPicture);
+            if (bm != null) {
+                builder.setLargeIcon(bm);
+                mNotificationManager.notify((int) e.mId, builder.build());
+            } else {
+                new BitmapTask(e.mPicture, null, (int) e.mId, builder).execute();
+            }
+        }
+    }
+
     private class BitmapTask extends AsyncTask<Void, Void, Bitmap> {
         private String mUrl;
         private ImageView mView;
+        private int mId;
+        private NotificationCompat.Builder mBuilder;
 
-        public BitmapTask(String url, ImageView view) {
+        public BitmapTask(String url, ImageView view, int id, NotificationCompat.Builder builder) {
             mUrl = url;
             mView = view;
+            mId = id;
+            mBuilder = builder;
         }
 
         @Override
@@ -93,10 +124,17 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
 
         @Override
         protected void onPostExecute(Bitmap bm) {
-            if (mUrl.equals(mView.getTag(R.integer.url))) {
-                mView.setImageBitmap(bm);
-            } else {
-                mView.setImageResource(R.drawable.ic_blank);
+            if (mView != null) {
+                if (mUrl.equals(mView.getTag(R.integer.url))) {
+                    mView.setImageBitmap(bm);
+                } else {
+                    mView.setImageResource(R.drawable.ic_blank);
+                }
+            }
+
+            if (mBuilder != null){
+                mBuilder.setLargeIcon(bm);
+                mNotificationManager.notify(mId, mBuilder.build());
             }
         }
 
@@ -118,9 +156,20 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
     public void onClick(View v) {
         Object name = v.getTag(R.integer.name);
         if (name instanceof String) {
-            Intent intent = new Intent(Intent.ACTION_WEB_SEARCH);
-            intent.putExtra(SearchManager.QUERY, (String) name);
-            sActivity.startActivity(intent);
+            sActivity.startActivity(getIntent((String) name));
         }
+    }
+
+    private Intent getIntent(String name) {
+//        Intent intent = new Intent(SearchManager.INTENT_ACTION_GLOBAL_SEARCH);
+//        intent.putExtra(SearchManager.QUERY, name);
+        Intent intent = new Intent(Intent.ACTION_ASSIST);
+        intent.putExtra("search_term", name);
+
+        return intent;
+    }
+
+    private PendingIntent getPendingIntent(String name) {
+        return PendingIntent.getActivity(sActivity, 0, getIntent(name), 0);
     }
 }

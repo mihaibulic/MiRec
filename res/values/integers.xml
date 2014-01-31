@@ -2,4 +2,5 @@
 <resources>
     <integer name="name">0</integer>
     <integer name="url">0</integer>
+    <integer name="max_notifications">10</integer>
 </resources>
