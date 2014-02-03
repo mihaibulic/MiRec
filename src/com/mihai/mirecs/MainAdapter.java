@@ -8,6 +8,7 @@ import java.util.List;
 import android.app.Activity;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -67,9 +68,10 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         }
 
         Entity e = mContent.get(position);
+        String name = new String(e.mName);
         ImageView imageView = ((ImageView) convertView.findViewById(R.id.picture));
         imageView.setTag(R.integer.url, e.mPicture);
-        imageView.setTag(R.integer.name, e.mName);
+        imageView.setTag(R.integer.name, name);
         imageView.setOnClickListener(this);
         Bitmap bm = mBitmaps.get(e.mPicture);
         if (bm != null) {
@@ -77,7 +79,7 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         } else {
             imageView.setImageResource(R.drawable.ic_blank);
         }
-        ((TextView) convertView.findViewById(R.id.name)).setText(e.mName);
+        ((TextView) convertView.findViewById(R.id.name)).setText(name);
 
         return convertView;
     }
@@ -85,10 +87,11 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
     public void postRecommendations() {
         for (int x = 0; x < mMaxNotifications; x++) {
             Entity e = mContent.get(x);
+            String name = new String(e.mName);
             NotificationCompat.Builder builder = new NotificationCompat.Builder(sActivity);
-            builder.setContentTitle(e.mName);
-            builder.setContentInfo(sActivity.getString(R.string.mihai));
-            builder.setContentIntent(getPendingIntent(e.mName));
+            builder.setContentTitle(name);
+            builder.setContentText(sActivity.getString(R.string.mihai));
+            builder.setContentIntent(getPendingIntent((int) e.mId, name));
             builder.setSmallIcon(R.drawable.ic_launcher);
             builder.setPriority(mMaxNotifications - x);
 
@@ -160,16 +163,21 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         }
     }
 
+    private Intent getPhoneIntent(String name) {
+        Intent intent = new Intent(Intent.ACTION_WEB_SEARCH);
+        intent.putExtra(SearchManager.QUERY, name);
+
+        return intent;
+    }
+
     private Intent getIntent(String name) {
-//        Intent intent = new Intent(SearchManager.INTENT_ACTION_GLOBAL_SEARCH);
-//        intent.putExtra(SearchManager.QUERY, name);
         Intent intent = new Intent(Intent.ACTION_ASSIST);
         intent.putExtra("search_term", name);
 
         return intent;
     }
 
-    private PendingIntent getPendingIntent(String name) {
-        return PendingIntent.getActivity(sActivity, 0, getIntent(name), 0);
+    private PendingIntent getPendingIntent(int reqCode, String name) {
+        return PendingIntent.getActivity(sActivity, reqCode, getIntent(name), 0);
     }
 }
