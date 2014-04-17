@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">MiRecs</string>
-    <string name="action_settings">Settings</string>
-    <string name="done">Done, here are your recommendations</string>
-    <string name="mihai">Brought to you by Mihai</string>
+    <string name="app_name" translate="false">MiRecs</string>
+    <string name="action_settings" translate="false">Settings</string>
+    <string name="done" translate="false">Done, here are your recommendations</string>
+    <string name="mihai" translate="false">Brought to you by Mihai</string>
 
-    <string name="app_id">260360087448359</string>
+    <string name="app_id" translate="false">260360087448359</string>
 
 </resources>

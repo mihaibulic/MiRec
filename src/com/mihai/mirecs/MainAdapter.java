@@ -1,12 +1,5 @@
 package com.mihai.mirecs;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-
 import android.app.Activity;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -28,7 +21,16 @@ import android.widget.TextView;
 
 import com.mihai.mirecs.data.Entity;
 
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+
 public class MainAdapter extends BaseAdapter implements OnClickListener {
+
+    private static final String TAG = "MiRecs";
 
     private final Activity mActivity;
     private final int mMaxNotifications;
@@ -83,10 +85,8 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
             bm = mBitmaps.get(e.mPicture);
         }
         if (bm != null) {
-            android.util.Log.v("bulic", "SETTING PIC " + position + " " + e.mPicture);
             imageView.setImageBitmap(bm);
         } else {
-            android.util.Log.v("bulic", "QUERY FOR PIC "  + position + " " + e.mPicture);
             imageView.setImageResource(R.drawable.ic_blank);
             synchronized (mTasks) {
                 if (!mTasks.contains(e.mPicture)) {
@@ -100,6 +100,13 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         return convertView;
     }
 
+    public void updateNextRecommendation() {
+        int position = mUpdated % mPostedNotifications.size();
+        if (postNextRecommendation(mPostedNotifications.get(position))) {
+            mUpdated++;
+        }
+    }
+
     public void postRecommendations() {
         for (int x = 0; x < mMaxNotifications; x++) {
             postNextRecommendation();
@@ -107,18 +114,23 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
     }
 
     public void postNextRecommendation() {
-        android.util.Log.v("MiRecs", "posting next recommendation");
         postNextRecommendation(-1);
     }
 
-    private void postNextRecommendation(int id) {
+    private boolean postNextRecommendation(int id) {
+        if (mContent == null || mContent.isEmpty()) {
+            return false;
+        }
+
         Entity e = mContent.get(mPosted++);
         boolean posting = (id == -1);
 
-        android.util.Log.v("MiRecs", "posting next recommendation | " + id + " , " + (int) e.mId);
 
         if (posting) {
+            android.util.Log.v(TAG, "posting next recommendation: " + (int) e.mId);
             id = (int) e.mId;
+        } else {
+            android.util.Log.v(TAG, "updating recommendation: " + id + " with " + (int) e.mId);
         }
 
         String name = new String(e.mName);
@@ -139,20 +151,17 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         } else {
             new BitmapTask(e.mPicture, null, id, builder, posting).execute();
         }
-    }
 
-    public void updateNextRecommendation() {
-        int position = mUpdated % mPostedNotifications.size();
-        android.util.Log.v("MiRecs", "updaing recommendation at position " + position);
-        postNextRecommendation(mPostedNotifications.get(position));
-        mUpdated++;
+        return true;
     }
 
     public void dismissRecommendation() {
-        if (!mPostedNotifications.isEmpty()) {
-            android.util.Log.v("MiRecs", "dismissing first recommendation");
-            mNotificationManager.cancel(mPostedNotifications.remove(0));
+        if (mPostedNotifications == null || mPostedNotifications.isEmpty()) {
+            return;
         }
+
+        android.util.Log.v(TAG, "dismissing first recommendation");
+        mNotificationManager.cancel(mPostedNotifications.remove(0));
     }
 
     private class BitmapTask extends AsyncTask<Void, Void, Bitmap> {
@@ -173,12 +182,10 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         @Override
         protected Bitmap doInBackground(Void... params) {
             Bitmap bm = getBitmap(mUrl);
-            if (bm == null) android.util.Log.v("bulic", "NULL???");
             synchronized (mTasks) {
                 mTasks.remove(mUrl);
             }
             synchronized (mBitmaps) {
-                android.util.Log.v("bulic", "GOT " + mUrl);
                 mBitmaps.put(mUrl, bm);
             }
             return bm;
