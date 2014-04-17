@@ -5,6 +5,7 @@ import java.util.List;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.Menu;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -18,8 +19,15 @@ import com.mihai.mirecs.data.ResultListener;
 public class MainActivity extends Activity implements ResultListener {
 
     private static final int TOTAL_QUERIES = 3;
+    private static final int POST_DELAY = 5000;
+    private static final int UPDATE_DELAY = 6000;
+    private static final int DISMISS_DELAY = 7000;
+
     private static int sQueryCount = 0;
+
     private FacebookRecommender mFb = new FacebookRecommender();
+    private Handler mHandler = new Handler();
+    private MainAdapter mAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,17 +63,44 @@ public class MainActivity extends Activity implements ResultListener {
 
     @Override
     public void onResultsReady(List<Entity> results) {
-        MainAdapter adapter = new MainAdapter(this, results);
-        ((ListView) findViewById(R.id.recs)).setAdapter(adapter);
+        mAdapter = new MainAdapter(this, results);
+        ((ListView) findViewById(R.id.recs)).setAdapter(mAdapter);
         setText("Progress: " + Math.round((100.0*(++sQueryCount))/TOTAL_QUERIES) + "%");
 
         if (sQueryCount == TOTAL_QUERIES) {
             (Toast.makeText(this, R.string.done, Toast.LENGTH_SHORT)).show();
-            adapter.postRecommendations();
+            mAdapter.postRecommendations();
+            mHandler.postDelayed(new Post(), POST_DELAY);
+            mHandler.postDelayed(new Update(), UPDATE_DELAY);
+            mHandler.postDelayed(new Dismiss(), POST_DELAY);
         }
     }
 
     private void setText(String text) {
         ((TextView) findViewById(R.id.info)).setText(text);
+    }
+
+    private class Post implements Runnable {
+        @Override
+        public void run() {
+            mAdapter.postNextRecommendation();
+            mHandler.postDelayed(new Post(), POST_DELAY);
+        }
+    }
+
+    private class Update implements Runnable {
+        @Override
+        public void run() {
+            mAdapter.updateNextRecommendation();
+            mHandler.postDelayed(new Update(), UPDATE_DELAY);
+        }
+    }
+
+    private class Dismiss implements Runnable {
+        @Override
+        public void run() {
+            mAdapter.dismissRecommendation();
+            mHandler.postDelayed(new Dismiss(), DISMISS_DELAY);
+        }
     }
 }

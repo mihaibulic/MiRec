@@ -3,6 +3,8 @@ package com.mihai.mirecs;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 import android.app.Activity;
@@ -28,18 +30,21 @@ import com.mihai.mirecs.data.Entity;
 
 public class MainAdapter extends BaseAdapter implements OnClickListener {
 
+    private final Activity mActivity;
     private final int mMaxNotifications;
-
-    private NotificationManager mNotificationManager;
-    private Activity sActivity;
-    private List<Entity> mContent;
-    LruCache<String, Bitmap> mBitmaps = new LruCache<String, Bitmap>(200);
+    private final ArrayList<Integer> mPostedNotifications = new ArrayList<Integer>();
+    private final NotificationManager mNotificationManager;
+    private final List<Entity> mContent;
+    private HashSet<String> mTasks = new HashSet<String>();
+    private final LruCache<String, Bitmap> mBitmaps = new LruCache<String, Bitmap>(200);
+    private int mPosted = 0;
+    private int mUpdated = 0;
 
     public MainAdapter(Activity act, List<Entity> content) {
-        sActivity = act;
+        mActivity = act;
         mContent = content;
-        mMaxNotifications = sActivity.getResources().getInteger(R.integer.max_notifications);
-        mNotificationManager = (NotificationManager) sActivity.getSystemService(Context.NOTIFICATION_SERVICE);
+        mMaxNotifications = mActivity.getResources().getInteger(R.integer.max_notifications);
+        mNotificationManager = (NotificationManager) mActivity.getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
     @Override
@@ -59,12 +64,12 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
 
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
-        if (position < 0 || position >= mContent.size() || position > mMaxNotifications) {
+        if (position < 0 || position >= mContent.size()) {
             return null;
         }
 
         if (convertView == null || convertView.getId() != R.id.entity) {
-            convertView = LayoutInflater.from(sActivity).inflate(R.layout.entity, null);
+            convertView = LayoutInflater.from(mActivity).inflate(R.layout.entity, null);
         }
 
         Entity e = mContent.get(position);
@@ -73,11 +78,22 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         imageView.setTag(R.integer.url, e.mPicture);
         imageView.setTag(R.integer.name, name);
         imageView.setOnClickListener(this);
-        Bitmap bm = mBitmaps.get(e.mPicture);
+        Bitmap bm = null;
+        synchronized (mBitmaps) {
+            bm = mBitmaps.get(e.mPicture);
+        }
         if (bm != null) {
+            android.util.Log.v("bulic", "SETTING PIC " + position + " " + e.mPicture);
             imageView.setImageBitmap(bm);
         } else {
+            android.util.Log.v("bulic", "QUERY FOR PIC "  + position + " " + e.mPicture);
             imageView.setImageResource(R.drawable.ic_blank);
+            synchronized (mTasks) {
+                if (!mTasks.contains(e.mPicture)) {
+                    mTasks.add(e.mPicture);
+                    new BitmapTask(e.mPicture, imageView, (int) e.mId, null, false).execute();
+                }
+            }
         }
         ((TextView) convertView.findViewById(R.id.name)).setText(name);
 
@@ -86,22 +102,56 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
 
     public void postRecommendations() {
         for (int x = 0; x < mMaxNotifications; x++) {
-            Entity e = mContent.get(x);
-            String name = new String(e.mName);
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(sActivity);
-            builder.setContentTitle(name);
-            builder.setContentText(sActivity.getString(R.string.mihai));
-            builder.setContentIntent(getPendingIntent((int) e.mId, name));
-            builder.setSmallIcon(R.drawable.ic_launcher);
-            builder.setPriority(mMaxNotifications - x);
+            postNextRecommendation();
+        }
+    }
 
-            Bitmap bm = mBitmaps.get(e.mPicture);
-            if (bm != null) {
-                builder.setLargeIcon(bm);
-                mNotificationManager.notify((int) e.mId, builder.build());
-            } else {
-                new BitmapTask(e.mPicture, null, (int) e.mId, builder).execute();
+    public void postNextRecommendation() {
+        android.util.Log.v("MiRecs", "posting next recommendation");
+        postNextRecommendation(-1);
+    }
+
+    private void postNextRecommendation(int id) {
+        Entity e = mContent.get(mPosted++);
+        boolean posting = (id == -1);
+
+        android.util.Log.v("MiRecs", "posting next recommendation | " + id + " , " + (int) e.mId);
+
+        if (posting) {
+            id = (int) e.mId;
+        }
+
+        String name = new String(e.mName);
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(mActivity);
+        builder.setContentTitle(name);
+        builder.setContentText(mActivity.getString(R.string.mihai));
+        builder.setContentIntent(getPendingIntent((int) e.mId, name));
+        builder.setSmallIcon(R.drawable.ic_launcher);
+        builder.setPriority((((mMaxNotifications-mPosted-1)-1)/2)-2);
+
+        Bitmap bm = mBitmaps.get(e.mPicture);
+        if (bm != null) {
+            builder.setLargeIcon(bm);
+            mNotificationManager.notify(id, builder.build());
+            if (posting) {
+                mPostedNotifications.add(id);
             }
+        } else {
+            new BitmapTask(e.mPicture, null, id, builder, posting).execute();
+        }
+    }
+
+    public void updateNextRecommendation() {
+        int position = mUpdated % mPostedNotifications.size();
+        android.util.Log.v("MiRecs", "updaing recommendation at position " + position);
+        postNextRecommendation(mPostedNotifications.get(position));
+        mUpdated++;
+    }
+
+    public void dismissRecommendation() {
+        if (!mPostedNotifications.isEmpty()) {
+            android.util.Log.v("MiRecs", "dismissing first recommendation");
+            mNotificationManager.cancel(mPostedNotifications.remove(0));
         }
     }
 
@@ -110,18 +160,27 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         private ImageView mView;
         private int mId;
         private NotificationCompat.Builder mBuilder;
+        private boolean mPosting;
 
-        public BitmapTask(String url, ImageView view, int id, NotificationCompat.Builder builder) {
+        public BitmapTask(String url, ImageView view, int id, NotificationCompat.Builder builder, boolean posting) {
             mUrl = url;
             mView = view;
             mId = id;
             mBuilder = builder;
+            mPosting = posting;
         }
 
         @Override
         protected Bitmap doInBackground(Void... params) {
             Bitmap bm = getBitmap(mUrl);
-            mBitmaps.put(mUrl, bm);
+            if (bm == null) android.util.Log.v("bulic", "NULL???");
+            synchronized (mTasks) {
+                mTasks.remove(mUrl);
+            }
+            synchronized (mBitmaps) {
+                android.util.Log.v("bulic", "GOT " + mUrl);
+                mBitmaps.put(mUrl, bm);
+            }
             return bm;
         }
 
@@ -138,6 +197,9 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
             if (mBuilder != null){
                 mBuilder.setLargeIcon(bm);
                 mNotificationManager.notify(mId, mBuilder.build());
+                if (mPosting) {
+                    mPostedNotifications.add(mId);
+                }
             }
         }
 
@@ -159,10 +221,11 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
     public void onClick(View v) {
         Object name = v.getTag(R.integer.name);
         if (name instanceof String) {
-            sActivity.startActivity(getIntent((String) name));
+            mActivity.startActivity(getPhoneIntent((String) name));
         }
     }
 
+    @SuppressWarnings("unused")
     private Intent getPhoneIntent(String name) {
         Intent intent = new Intent(Intent.ACTION_WEB_SEARCH);
         intent.putExtra(SearchManager.QUERY, name);
@@ -170,6 +233,7 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
         return intent;
     }
 
+    @SuppressWarnings("unused")
     private Intent getIntent(String name) {
         Intent intent = new Intent(Intent.ACTION_ASSIST);
         intent.putExtra("search_term", name);
@@ -178,6 +242,6 @@ public class MainAdapter extends BaseAdapter implements OnClickListener {
     }
 
     private PendingIntent getPendingIntent(int reqCode, String name) {
-        return PendingIntent.getActivity(sActivity, reqCode, getIntent(name), 0);
+        return PendingIntent.getActivity(mActivity, reqCode, getPhoneIntent(name), 0);
     }
 }
